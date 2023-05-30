@@ -1,285 +1,353 @@
-//A falling square with shadows and a light source that can be moved with the mouse using WebGL without the use of any libraries.
+var vertexShaderText = 
+[
+'precision mediump float;',
+'',
+'attribute vec3 vertPosition;',
+'attribute vec3 vertColor;',
+'varying vec3 fragColor;',
+'uniform mat4 mWorld;',
+'uniform mat4 mView;',
+'uniform mat4 mProj;',
+'',
+'void main()',
+'{',
+'  fragColor = vertColor;',
+'  gl_Position = mProj * mView * mWorld * vec4(vertPosition, 1.0);',
+'}'
+].join('\n');
 
-//Create the WebGL context and set up the canvas
-const canvas = document.querySelector('canvas');
-const gl = canvas.getContext('webgl2');
-gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear to black
-gl.clear(gl.COLOR_BUFFER_BIT);
-
-//Initialize square's position
-let positionSquare1 = [0.0, 1.5];
-let positionSquare2 = [0.2, 1.0];
-let velocitySquare1 = [0.0, -0.01];  // Falling down
-let velocitySquare2 = [0.0, -0.01];  // Falling down
-let rotationAngleSquare1 = 0;
-let rotationAngleSquare2 = 0;
-
-
-
-const verticesSquare1 = [
-    0.0, 0.0, 0.0, 
-    0.0, 0.5, 0.0,
-    0.5, 0.5, 0.0,
-    0.5, 0.0, 0.0
-];
-const indicesSquare1 = [
-    0, 1, 2,
-    0, 2, 3
-];
-
-const verticesSquare2 = [
-    0.0, 0.0, 0.1,
-    0.0, 0.5, 0.1,
-    0.5, 0.5, 0.1,
-    0.5, 0.0, 0.1
-];
-const indicesSquare2 = indicesSquare1;
-
-//Creating a surface
-const groundVertices = [
-    -1.0, -1.0,  0.0,  // Bottom left corner
-    -1.0, -0.8,  0.0,  // Top left corner
-     1.0, -0.8,  0.0,  // Top right corner
-     1.0, -1.0,  0.0   // Bottom right corner
-];
-
-const groundIndices = [
-    0, 1, 2,
-    0, 2, 3
-];
+var fragmentShaderText =
+[
+'precision mediump float;',
+'',
+'varying vec3 fragColor;',
+'void main()',
+'{',
+'  gl_FragColor = vec4(fragColor, 1.0);',
+'}'
+].join('\n');
 
 
-
-
-
-
-
-
-//Creating the shaders
-const vertexShaderCode = `
-    attribute vec3 coordinates;
-    uniform mat4 modelViewMatrix;
-    uniform mat4 projectionMatrix;
-
-    void main(void) {
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(coordinates, 1.0);
-    }`;
-
-const fragmentShaderCode = `
-    precision mediump float;
-    uniform vec4 uColor;
-
-    void main(void) {
-        gl_FragColor = uColor;
-    }`;
-
-
-
-//Compiling the shaders
-const vertexShader = gl.createShader(gl.VERTEX_SHADER); // Create a vertex shader object
-gl.shaderSource(vertexShader, vertexShaderCode); // Attach vertex shader source code
-gl.compileShader(vertexShader); // Compile the vertex shader
-
-const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER); // Create fragment shader object
-gl.shaderSource(fragmentShader, fragmentShaderCode); // Attach fragment shader source code
-gl.compileShader(fragmentShader); // Compile the fragment shader
-
-
-//Creating the shader program
-const shaderProgram = gl.createProgram(); // Create a shader program object to store the combined shader program
-gl.attachShader(shaderProgram, vertexShader); // Attach a vertex shader
-gl.attachShader(shaderProgram, fragmentShader); // Attach a fragment shader
-gl.linkProgram(shaderProgram); // Link both the programs
-// Check for errors
-if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
-    console.error('Could not initialize shaders');
+function addVectors(a, b) {
+    return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 }
-if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
-    console.error(gl.getShaderInfoLog(vertexShader));
-}
-if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
-    console.error(gl.getShaderInfoLog(fragmentShader));
-}
-gl.useProgram(shaderProgram);
-const colorLocation = gl.getUniformLocation(shaderProgram, 'uColor');
-
-//Creating the buffer for the first square
-const vertexBufferSquare1 = gl.createBuffer(); 
-gl.bindBuffer(gl.ARRAY_BUFFER, vertexBufferSquare1);
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verticesSquare1), gl.STATIC_DRAW);
-
-const indexBufferSquare1 = gl.createBuffer();
-gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBufferSquare1);
-gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indicesSquare1), gl.STATIC_DRAW);
-
-//Creating the buffer for the second square
-const vertexBufferSquare2 = gl.createBuffer(); 
-gl.bindBuffer(gl.ARRAY_BUFFER, vertexBufferSquare2);
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verticesSquare2), gl.STATIC_DRAW);
-
-const indexBufferSquare2 = gl.createBuffer();
-gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBufferSquare2);
-gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indicesSquare2), gl.STATIC_DRAW);
-
-//Creating the buffer for the surface
-const groundVertexBuffer = gl.createBuffer(); // Create a buffer object
-gl.bindBuffer(gl.ARRAY_BUFFER, groundVertexBuffer); // Bind the buffer object to target
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(groundVertices), gl.STATIC_DRAW); // Write data into the buffer object
-
-const groundIndexBuffer = gl.createBuffer(); // Create a buffer object
-gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, groundIndexBuffer); // Bind the buffer object to target
-gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(groundIndices), gl.STATIC_DRAW); // Write data into the buffer object
 
 
-//Assigning the buffer to the shader program
-const coordinatesVar = gl.getAttribLocation(shaderProgram, 'coordinates'); // Get the attribute location
-gl.vertexAttribPointer(coordinatesVar, 3, gl.FLOAT, false, 0, 0); // Point an attribute to the currently bound VBO and specify its format  
-gl.enableVertexAttribArray(coordinatesVar); // Enable the attribute
+var InitDemo = function () {
+	console.log('This is working');
 
-//Create a depth texture and frame buffer for the shadow map
-const depthTextureSize = 1024; // Size of the depth texture
-const depthTexture = gl.createTexture(); // Create a texture object
-gl.bindTexture(gl.TEXTURE_2D, depthTexture); // Bind the texture object to the target
-gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, depthTextureSize, depthTextureSize, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null); // Specify the texture object
-
-const depthFramebuffer = gl.createFramebuffer(); // Create a framebuffer object
-gl.bindFramebuffer(gl.FRAMEBUFFER, depthFramebuffer); // Bind the framebuffer object to the target
-gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, depthTexture, 0); // Attach the texture object to the framebuffer object
-
-//Render the scene from the light's point of view into the shadow map
-gl.viewport(0, 0, depthTextureSize, depthTextureSize); // Set the viewport to the size of the depth texture
-gl.bindFramebuffer(gl.FRAMEBUFFER, depthFramebuffer); // Bind the framebuffer object to the target
-
-
-//Animate the squares
-let startTime = Date.now(); 
-
-function animate() {
-    const currentTime = Date.now(); // Time of the current frame
-    const deltaTime = currentTime - startTime; // Time since the last frame
-
-    gl.viewport(0, 0, canvas.width, canvas.height); // Set the viewport to the size of the canvas
-
-    gl.clearColor(0.0, 0.0, 0.0, 1.0); // Set the clear color to black
-    gl.clearDepth(1.0); // Set the clear depth to 1.0 (all pixels are at maximum distance)
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // Clear the color buffer bit and the depth buffer bit
+    var velocity = [0, 0, 0]; // The cube's velocity
+    var gravity = [0, 0.002, 0]; // The gravity vector
+    var bounceLoss = 0.7; // The amount of energy lost each bounce
+    var cubeYPosition = 1; // The cube's y position
     
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Bind the framebuffer object to the targetr bit
+	var canvas = document.getElementById('game-surface');
+	var gl = canvas.getContext('webgl');
 
-    gl.enable(gl.DEPTH_TEST); // Enable depth testing
+	if (!gl) {
+		console.log('WebGL not supported, falling back on experimental-webgl');
+		gl = canvas.getContext('experimental-webgl');
+	}
 
-    const modelViewMatrixGround = createMat4(); // Create a model view matrix for the ground
+	if (!gl) {
+		alert('Your browser does not support WebGL');
+	}
+
+	gl.clearColor(0.75, 0.85, 0.8, 1.0);
+	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	gl.enable(gl.DEPTH_TEST);
+	gl.enable(gl.CULL_FACE);
+	gl.frontFace(gl.CCW);
+	gl.cullFace(gl.BACK);
+
+	//
+	// Create shaders for the cube
+	// 
+	var cubeVertexShader = gl.createShader(gl.VERTEX_SHADER);
+	var cubeFragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+
+	gl.shaderSource(cubeVertexShader, vertexShaderText);
+	gl.shaderSource(cubeFragmentShader, fragmentShaderText);
+
+	gl.compileShader(cubeVertexShader);
+	if (!gl.getShaderParameter(cubeVertexShader, gl.COMPILE_STATUS)) {
+		console.error('ERROR compiling vertex shader!', gl.getShaderInfoLog(cubeVertexShader));
+		return;
+	}
+
+	gl.compileShader(cubeFragmentShader);
+	if (!gl.getShaderParameter(cubeFragmentShader, gl.COMPILE_STATUS)) {
+		console.error('ERROR compiling fragment shader!', gl.getShaderInfoLog(cubeFragmentShader));
+		return;
+	}
+
+	var program = gl.createProgram();
+	gl.attachShader(program, cubeVertexShader);
+	gl.attachShader(program, cubeFragmentShader);
+	gl.linkProgram(program);
+	if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+		console.error('ERROR linking program!', gl.getProgramInfoLog(program));
+		return;
+	}
+	gl.validateProgram(program);
+	if (!gl.getProgramParameter(program, gl.VALIDATE_STATUS)) {
+		console.error('ERROR validating program!', gl.getProgramInfoLog(program));
+		return;
+	}
+
+    // Create shaders for the floor
+    var groundVertexShader = gl.createShader(gl.VERTEX_SHADER);
+    var groundFragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+
+    gl.shaderSource(groundVertexShader, vertexShaderText);
+    gl.shaderSource(groundFragmentShader, fragmentShaderText);
+
+    gl.compileShader(groundVertexShader);
+    if (!gl.getShaderParameter(groundVertexShader, gl.COMPILE_STATUS)) {
+        console.error('ERROR compiling vertex shader!', gl.getShaderInfoLog(groundVertexShader));
+        return;
+    }
+
+    gl.compileShader(groundFragmentShader);
+    if (!gl.getShaderParameter(groundFragmentShader, gl.COMPILE_STATUS)) {
+        console.error('ERROR compiling fragment shader!', gl.getShaderInfoLog(groundFragmentShader));
+        return;
+    }
+
+    var groundProgram = gl.createProgram();
+    gl.attachShader(groundProgram, groundVertexShader);
+    gl.attachShader(groundProgram, groundFragmentShader);
+    gl.linkProgram(groundProgram);
+    if (!gl.getProgramParameter(groundProgram, gl.LINK_STATUS)) {
+        console.error('ERROR linking program!', gl.getProgramInfoLog(groundProgram));
+        return;
+    }
+    gl.validateProgram(groundProgram);
+    if (!gl.getProgramParameter(groundProgram, gl.VALIDATE_STATUS)) {
+        console.error('ERROR validating program!', gl.getProgramInfoLog(groundProgram));
+        return;
+    }
 
 
+	//
+	// Create buffer
+	//
+	var cubeVertices = 
+	[ // X, Y, Z           R, G, B
+		// Top
+		-1.0, 1.0, -1.0,   0.5, 0.5, 0.5,
+		-1.0, 1.0, 1.0,    0.5, 0.5, 0.5,
+		1.0, 1.0, 1.0,     0.5, 0.5, 0.5,
+		1.0, 1.0, -1.0,    0.5, 0.5, 0.5,
 
-    positionSquare1[0] += velocitySquare1[0];
-    positionSquare1[1] += velocitySquare1[1];
-    positionSquare2[0] += velocitySquare2[0];
-    positionSquare2[1] += velocitySquare2[1];
+		// Left
+		-1.0, 1.0, 1.0,    0.75, 0.25, 0.5,
+		-1.0, -1.0, 1.0,   0.75, 0.25, 0.5,
+		-1.0, -1.0, -1.0,  0.75, 0.25, 0.5,
+		-1.0, 1.0, -1.0,   0.75, 0.25, 0.5,
 
-    const sizeSquare1 = [0.5, 0.5];  // width and height of the first square
-    const sizeSquare2 = [0.4, 0.4];  // width and height of the second square
+		// Right
+		1.0, 1.0, 1.0,    0.25, 0.25, 0.75,
+		1.0, -1.0, 1.0,   0.25, 0.25, 0.75,
+		1.0, -1.0, -1.0,  0.25, 0.25, 0.75,
+		1.0, 1.0, -1.0,   0.25, 0.25, 0.75,
 
-    let dx = positionSquare1[0] - positionSquare2[0];
-    let dy = positionSquare1[1] - positionSquare2[1];
-    let combinedHalfWidths = sizeSquare1[0] / 2 + sizeSquare2[0] / 2;
-    let combinedHalfHeights = sizeSquare1[1] / 2 + sizeSquare2[1] / 2;
+		// Front
+		1.0, 1.0, 1.0,    1.0, 0.0, 0.15,
+		1.0, -1.0, 1.0,    1.0, 0.0, 0.15,
+		-1.0, -1.0, 1.0,    1.0, 0.0, 0.15,
+		-1.0, 1.0, 1.0,    1.0, 0.0, 0.15,
+
+		// Back
+		1.0, 1.0, -1.0,    0.0, 1.0, 0.15,
+		1.0, -1.0, -1.0,    0.0, 1.0, 0.15,
+		-1.0, -1.0, -1.0,    0.0, 1.0, 0.15,
+		-1.0, 1.0, -1.0,    0.0, 1.0, 0.15,
+
+		// Bottom
+		-1.0, -1.0, -1.0,   0.5, 0.5, 1.0,
+		-1.0, -1.0, 1.0,    0.5, 0.5, 1.0,
+		1.0, -1.0, 1.0,     0.5, 0.5, 1.0,
+		1.0, -1.0, -1.0,    0.5, 0.5, 1.0,
+	];
+
+	var cubeIndices =
+	[
+		// Top
+		0, 1, 2,
+		0, 2, 3,
+
+		// Left
+		5, 4, 6,
+		6, 4, 7,
+
+		// Right
+		8, 9, 10,
+		8, 10, 11,
+
+		// Front
+		13, 12, 14,
+		15, 14, 12,
+
+		// Back
+		16, 17, 18,
+		16, 18, 19,
+
+		// Bottom
+		21, 20, 22,
+		22, 20, 23
+	];
+
+    // ground plain/surface vertices
+    var groundVertices =
+    [ // X, Y, Z           R, G, B
+        // Top
+        -1.0, -1.0, -1.0,   0.5, 0.5, 0.5,
+        -1.0, -1.0, 1.0,    0.5, 0.5, 0.5,
+        1.0, -1.0, 1.0,     0.5, 0.5, 0.5,
+        1.0, -1.0, -1.0,    0.5, 0.5, 0.5,
+    ];
+
+
+    // ground plain/surface indices
+    var groundIndices =
+    [
+        // Top
+        0, 1, 2,
+        0, 2, 3,
+    ];
     
-    if (Math.abs(dx) < combinedHalfWidths && Math.abs(dy) < combinedHalfHeights) {
-        // Collision detected. Now we'll "bounce" the squares off each other by reversing their velocities.
-        velocitySquare1[0] = -velocitySquare1[0];
-        velocitySquare1[1] = -velocitySquare1[1];
-        velocitySquare2[0] = -velocitySquare2[0];
-        velocitySquare2[1] = -velocitySquare2[1];
+	var cubeVertexBufferObject = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexBufferObject);
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertices), gl.STATIC_DRAW);
+
+	var cubeIndexBufferObject = gl.createBuffer();
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeIndexBufferObject);
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeIndices), gl.STATIC_DRAW);
+
+    var groundVertexBufferObject = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, groundVertexBufferObject);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(groundVertices), gl.STATIC_DRAW);
+
+    var groundIndexBufferObject = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, groundIndexBufferObject);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(groundIndices), gl.STATIC_DRAW);
+
+    //  Create texture for the cube
+	var cubePositionAttribLocation = gl.getAttribLocation(program, 'vertPosition');
+	var cubeColorAttribLocation = gl.getAttribLocation(program, 'vertColor');
+	gl.vertexAttribPointer(
+		cubePositionAttribLocation, // Attribute location
+		3, // Number of elements per attribute
+		gl.FLOAT, // Type of elements
+		gl.FALSE,
+		6 * Float32Array.BYTES_PER_ELEMENT, // Size of an individual vertex
+		0 // Offset from the beginning of a single vertex to this attribute
+	);
+	gl.vertexAttribPointer(
+		cubeColorAttribLocation, // Attribute location
+		3, // Number of elements per attribute
+		gl.FLOAT, // Type of elements
+		gl.FALSE,
+		6 * Float32Array.BYTES_PER_ELEMENT, // Size of an individual vertex
+		3 * Float32Array.BYTES_PER_ELEMENT // Offset from the beginning of a single vertex to this attribute
+	);
+
+	gl.enableVertexAttribArray(cubePositionAttribLocation);
+	gl.enableVertexAttribArray(cubeColorAttribLocation);
+
+
+    //  Create texture for the ground
+    var groundPositionAttribLocation = gl.getAttribLocation(groundProgram, 'vertPosition');
+    var groundColorAttribLocation = gl.getAttribLocation(groundProgram, 'vertColor');
+
+    gl.vertexAttribPointer(
+        groundPositionAttribLocation,
+        3,
+        gl.FLOAT,
+        gl.FALSE,
+        6 * Float32Array.BYTES_PER_ELEMENT,
+        0
+    );
+    gl.vertexAttribPointer(
+        groundColorAttribLocation,
+        3,
+        gl.FLOAT,
+        gl.FALSE,
+        6 * Float32Array.BYTES_PER_ELEMENT,
+        3 * Float32Array.BYTES_PER_ELEMENT
+    );
+    gl.enableVertexAttribArray(groundPositionAttribLocation);
+    gl.enableVertexAttribArray(groundColorAttribLocation);
+
+
+	// Tell OpenGL state machine which program should be active.
+	gl.useProgram(program);
+
+	var matWorldUniformLocation = gl.getUniformLocation(program, 'mWorld');
+	var matViewUniformLocation = gl.getUniformLocation(program, 'mView');
+	var matProjUniformLocation = gl.getUniformLocation(program, 'mProj');
+
+	var cubeWorldMatrix = new Float32Array(16);
+    var groundWorldMatrix = new Float32Array(16);
+	var viewMatrix = new Float32Array(16);
+	var projMatrix = new Float32Array(16);
+	mat4.identity(cubeWorldMatrix);
+    mat4.identity(groundWorldMatrix);
+	mat4.lookAt(viewMatrix, [0, 0, -8], [0, 0, 0], [0, 1, 0]);
+	mat4.perspective(projMatrix, glMatrix.toRadian(45), canvas.clientWidth / canvas.clientHeight, 0.1, 1000.0);
+
+	gl.uniformMatrix4fv(matWorldUniformLocation, gl.FALSE, cubeWorldMatrix);
+    gl.uniformMatrix4fv(matWorldUniformLocation, gl.FALSE, groundWorldMatrix);
+	gl.uniformMatrix4fv(matViewUniformLocation, gl.FALSE, viewMatrix);
+	gl.uniformMatrix4fv(matProjUniformLocation, gl.FALSE, projMatrix);
+
+	var xRotationMatrix = new Float32Array(16);
+	var yRotationMatrix = new Float32Array(16);
+
+	//
+	// Main render loop
+	//
+	var identityMatrix = new Float32Array(16);
+	mat4.identity(identityMatrix);
+	var angle = 0;
+    var loop = function () {
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     
-        // Resolve overlap and rotate squares (simple version: move squares away from each other along the x axis)
-        let overlapX = combinedHalfWidths - Math.abs(dx);
-        if (dx > 0) {
-            positionSquare1[0] += overlapX/2;
-            positionSquare2[0] -= overlapX/2;
-        } else {
-            positionSquare1[0] -= overlapX/2;
-            positionSquare2[0] += overlapX/2;
+        velocity = addVectors(velocity, gravity);
+        cubeYPosition += velocity[1];
+    
+        // If the cube hits the "floor"...
+        if (cubeYPosition < -1) { // The cube's bottom is at Y = -1
+            cubeYPosition = -1; // Move the cube back to the floor
+            velocity[1] *= -bounceLoss; // Reflect and dampen the velocity
         }
     
-        // Add a slight rotation to each square on collision
-        rotationAngleSquare1 += 0.1;  // You can adjust the value to change rotation intensity
-        rotationAngleSquare2 += 0.1;  // You can adjust the value to change rotation intensity
-    }
+        angle = performance.now() / 1000 / 6 * 2 * Math.PI;
+        mat4.rotate(yRotationMatrix, identityMatrix, angle, [0, 1, 0]);
+        mat4.rotate(xRotationMatrix, identityMatrix, angle / 4, [1, 0, 0]);
+        mat4.mul(cubeWorldMatrix, yRotationMatrix, xRotationMatrix);
+    
+        // Position the cube above the ground
+        mat4.translate(cubeWorldMatrix, cubeWorldMatrix, [0, cubeYPosition, 0]);
+    
+        // Render cube
+        gl.useProgram(program);
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexBufferObject);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeIndexBufferObject);
+        gl.uniformMatrix4fv(matWorldUniformLocation, gl.FALSE, cubeWorldMatrix);
+        gl.drawElements(gl.TRIANGLES, cubeIndices.length, gl.UNSIGNED_SHORT, 0);
+    
+        // Render ground
+        gl.useProgram(groundProgram);
+        gl.bindBuffer(gl.ARRAY_BUFFER, groundVertexBufferObject);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, groundIndexBufferObject);
+        gl.uniformMatrix4fv(matWorldUniformLocation, gl.FALSE, groundWorldMatrix);
+        gl.drawElements(gl.TRIANGLES, groundIndices.length, gl.UNSIGNED_SHORT, 0);
+    
+        requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
     
     
-    
-
-    if (positionSquare1[0] < -1 || positionSquare1[0] > 1) {
-        velocitySquare1[0] = -velocitySquare1[0];
-    }
-    if (positionSquare1[1] < -1 || positionSquare1[1] > 1) {
-        velocitySquare1[1] = -velocitySquare1[1];
-    }
-    if (positionSquare2[0] < -1 || positionSquare2[0] > 1) {
-        velocitySquare2[0] = -velocitySquare2[0];
-    }
-    if (positionSquare2[1] < -1 || positionSquare2[1] > 1) {
-        velocitySquare2[1] = -velocitySquare2[1];
-    }
-    
-
-
-    let projectionMatrix = orthoMat4(createMat4(), -1, 1, -1, 1, -1, 1);
-    const projectionMatrixVar = gl.getUniformLocation(shaderProgram, 'projectionMatrix');
-    const modelViewMatrixVar = gl.getUniformLocation(shaderProgram, 'modelViewMatrix');
-
-    // Translate and rotate the first square to the current position
-    let modelViewMatrixSquare1 = createMat4();
-    translateMat4(modelViewMatrixSquare1, modelViewMatrixSquare1, positionSquare1);
-    rotateZMat4(modelViewMatrixSquare1, modelViewMatrixSquare1, rotationAngleSquare1);
-
-    // First Square Rendering
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBufferSquare1);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBufferSquare1);
-    gl.vertexAttribPointer(coordinatesVar, 3, gl.FLOAT, false, 0, 0);
-    gl.uniform4f(colorLocation, 1.0, 0.0, 0.0, 1.0);  // Red color
-    gl.uniformMatrix4fv(modelViewMatrixVar, false, new Float32Array(modelViewMatrixSquare1));
-    gl.uniformMatrix4fv(projectionMatrixVar, false, new Float32Array(projectionMatrix));
-    gl.drawElements(gl.TRIANGLES, indicesSquare1.length, gl.UNSIGNED_SHORT, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-
-    // Translate and rotate the second square to the current position
-    let modelViewMatrixSquare2 = createMat4();
-    translateMat4(modelViewMatrixSquare2, modelViewMatrixSquare2, positionSquare2);
-    rotateZMat4(modelViewMatrixSquare2, modelViewMatrixSquare2, rotationAngleSquare2);
-
-    // Second Square Rendering
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBufferSquare2);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBufferSquare2);
-    gl.vertexAttribPointer(coordinatesVar, 3, gl.FLOAT, false, 0, 0);
-    gl.uniform4f(colorLocation, 1.0, 1.0, 0.0, 1.0);  // Yellow color
-    gl.uniformMatrix4fv(modelViewMatrixVar, false, new Float32Array(modelViewMatrixSquare2));
-    gl.uniformMatrix4fv(projectionMatrixVar, false, new Float32Array(projectionMatrix));
-    gl.drawElements(gl.TRIANGLES, indicesSquare2.length, gl.UNSIGNED_SHORT, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-
-    // Ground Rendering
-    gl.bindBuffer(gl.ARRAY_BUFFER, groundVertexBuffer);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, groundIndexBuffer);
-    gl.vertexAttribPointer(coordinatesVar, 3, gl.FLOAT, false, 0, 0);
-    gl.uniform4f(colorLocation, 0.0, 0.0, 1.0, 1.0);  // Blue color
-    gl.uniformMatrix4fv(modelViewMatrixVar, false, new Float32Array(modelViewMatrixGround));
-    gl.uniformMatrix4fv(projectionMatrixVar, false, new Float32Array(projectionMatrix));
-    gl.drawElements(gl.TRIANGLES, groundIndices.length, gl.UNSIGNED_SHORT, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-
-    startTime = currentTime;
-    requestAnimationFrame(animate);
-}
-
-animate();    
-
-
-
-
-
-
+};
